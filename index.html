@@ -1,71 +1,199 @@
-<!DOCTYPE html>
-<html lang="fi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BMI & BRI Calculator</title>
-  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.min.js" crossorigin></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.min.js" crossorigin></script>
-  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6/babel.min.js"></script>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState } = React;
+<script type="text/babel">
+  const { useMemo, useState } = React;
 
-    function App() {
-      const [weight, setWeight] = useState('');
-      const [height, setHeight] = useState('');
-      const [waist, setWaist] = useState('');
-      const [bmi, setBmi] = useState(null);
+  function clamp(n, min, max) {
+    return Math.min(max, Math.max(min, n));
+  }
 
-      function calculate(e) {
-        e.preventDefault();
-        const w = parseFloat(weight);
-        const h = parseFloat(height) / 100;  // cm → m
-        if (w > 0 && h > 0) {
-          setBmi((w / (h * h)).toFixed(1));
-        } else {
-          setBmi(null);
-        }
-      }
+  function round(n, digits = 1) {
+    const p = Math.pow(10, digits);
+    return Math.round(n * p) / p;
+  }
 
-      return (
-        <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto', fontFamily: 'sans-serif' }}>
-          <h1>BMI & BRI Calculator</h1>
-          <form onSubmit={calculate}>
-            <div style={{ marginBottom: '10px' }}>
-              <label>Paino (kg): </label>
-              <input
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-              />
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label>Pituus (cm): </label>
-              <input
-                type="number"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-              />
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label>Vyötärön ympärysmitta (cm): </label>
-              <input
-                type="number"
-                value={waist}
-                onChange={(e) => setWaist(e.target.value)}
-              />
-            </div>
-            <button type="submit">Laske BMI</button>
-          </form>
-          {bmi !== null && <p>BMI: {bmi}</p>}
+  function bmiCategory(bmi) {
+    if (!Number.isFinite(bmi)) return { label: "–", color: "#6b7280", hint: "" };
+    if (bmi < 18.5) return { label: "Alipaino", color: "#6b7280", hint: "BMI < 18.5" };
+    if (bmi < 25) return { label: "Normaali", color: "#16a34a", hint: "18.5–24.9" };
+    if (bmi < 30) return { label: "Ylipaino", color: "#ca8a04", hint: "25.0–29.9" };
+    return { label: "Lihavuus", color: "#dc2626", hint: "≥ 30" };
+  }
+
+  function briCategory(bri) {
+    if (!Number.isFinite(bri)) return { label: "–", color: "#6b7280", hint: "" };
+    if (bri < 3) return { label: "Hyvin hoikka", color: "#16a34a", hint: "BRI < 3" };
+    if (bri < 5) return { label: "Keskitaso", color: "#16a34a", hint: "3–4.9" };
+    if (bri < 6.9) return { label: "Koholla", color: "#ca8a04", hint: "5.0–6.8" };
+    if (bri < 12) return { label: "Korkea", color: "#dc2626", hint: "≥ 6.9" };
+    return { label: "Erittäin korkea", color: "#dc2626", hint: "> 12" };
+  }
+
+  function App() {
+    const [weightKg, setWeightKg] = useState(75);
+    const [heightCm, setHeightCm] = useState(175);
+    const [waistCm, setWaistCm] = useState(85);
+
+    const heightM = useMemo(() => heightCm / 100, [heightCm]);
+
+    const bmi = useMemo(() => {
+      if (heightM <= 0) return NaN;
+      return weightKg / (heightM * heightM);
+    }, [weightKg, heightM]);
+
+    const bri = useMemo(() => {
+      if (heightCm <= 0) return NaN;
+      const r = waistCm / heightCm; // waist-to-height ratio
+      const x = r / Math.PI;
+      const inside = clamp(1 - x * x, 0, 1);
+      const eccentricity = Math.sqrt(inside);
+      return 364.2 - 365.5 * eccentricity;
+    }, [waistCm, heightCm]);
+
+    const bmiCat = useMemo(() => bmiCategory(bmi), [bmi]);
+    const briCat = useMemo(() => briCategory(bri), [bri]);
+
+    const fieldStyle = { display: "grid", gap: 6, marginBottom: 14 };
+    const rowStyle = { display: "flex", gap: 10, alignItems: "center" };
+    const cardStyle = {
+      border: "1px solid #e5e7eb",
+      borderRadius: 16,
+      padding: 16,
+      background: "white",
+      boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
+    };
+    const badgeStyle = (color) => ({
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "4px 10px",
+      borderRadius: 999,
+      border: `1px solid ${color}33`,
+      background: `${color}14`,
+      color,
+      fontSize: 12,
+      fontWeight: 600,
+      whiteSpace: "nowrap",
+    });
+
+    return (
+      <div style={{ padding: 20, maxWidth: 860, margin: "0 auto", fontFamily: "system-ui, sans-serif", background: "#f8fafc", minHeight: "100vh" }}>
+        <div style={{ ...cardStyle, marginBottom: 16 }}>
+          <h1 style={{ margin: 0, fontSize: 22 }}>BMI + BRI -laskuri</h1>
+          <p style={{ marginTop: 8, marginBottom: 0, color: "#64748b" }}>
+            Syötä paino, pituus ja vyötärönympärys. Saat sekä BMI- että BRI-arvion.
+          </p>
         </div>
-      );
-    }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
-  </script>
-</body>
-</html>
+        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: 16 }}>
+          <div style={cardStyle}>
+            <div style={fieldStyle}>
+              <label>Paino (kg)</label>
+              <div style={rowStyle}>
+                <input type="number" min="40" max="200" step="0.1"
+                  value={weightKg}
+                  onChange={(e) => setWeightKg(clamp(Number(e.target.value || 0), 40, 200))}
+                  style={{ width: 90, padding: 8, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                />
+                <input type="range" min="40" max="200" step="0.1"
+                  value={weightKg}
+                  onChange={(e) => setWeightKg(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>40–200 kg</div>
+            </div>
+          </div>
+
+          <div style={cardStyle}>
+            <div style={fieldStyle}>
+              <label>Pituus (cm)</label>
+              <div style={rowStyle}>
+                <input type="number" min="140" max="220" step="0.1"
+                  value={heightCm}
+                  onChange={(e) => setHeightCm(clamp(Number(e.target.value || 0), 140, 220))}
+                  style={{ width: 90, padding: 8, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                />
+                <input type="range" min="140" max="220" step="0.1"
+                  value={heightCm}
+                  onChange={(e) => setHeightCm(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>140–220 cm</div>
+            </div>
+          </div>
+
+          <div style={cardStyle}>
+            <div style={fieldStyle}>
+              <label>Vyötärö (cm)</label>
+              <div style={rowStyle}>
+                <input type="number" min="50" max="150" step="0.1"
+                  value={waistCm}
+                  onChange={(e) => setWaistCm(clamp(Number(e.target.value || 0), 50, 150))}
+                  style={{ width: 90, padding: 8, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                />
+                <input type="range" min="50" max="150" step="0.1"
+                  value={waistCm}
+                  onChange={(e) => setWaistCm(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>50–150 cm</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+          <div style={cardStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>BMI</div>
+                <div style={{ color: "#64748b", fontSize: 13 }}>Paino suhteessa pituuteen</div>
+              </div>
+              <span style={badgeStyle(bmiCat.color)}>{bmiCat.label}</span>
+            </div>
+            <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div style={{ fontSize: 34, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+                {Number.isFinite(bmi) ? round(bmi, 1) : "–"}
+              </div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>{bmiCat.hint}</div>
+            </div>
+            <div style={{ marginTop: 10, color: "#64748b", fontSize: 12 }}>
+              Vihreä 18.5–24.9, keltainen 25.0–29.9, punainen ≥ 30.
+            </div>
+          </div>
+
+          <div style={cardStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>BRI</div>
+                <div style={{ color: "#64748b", fontSize: 13 }}>Keskivartalon “pyöreys” (vyötärö + pituus)</div>
+              </div>
+              <span style={badgeStyle(briCat.color)}>{briCat.label}</span>
+            </div>
+            <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div style={{ fontSize: 34, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+                {Number.isFinite(bri) ? round(bri, 2) : "–"}
+              </div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>{briCat.hint}</div>
+            </div>
+            <div style={{ marginTop: 10, color: "#64748b", fontSize: 12 }}>
+              BRI on jatkuva indeksi (yleensä ~1–10). Suurempi = pyöreämpi keskivartalo.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16, ...cardStyle }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Kaavat</div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: "#475569" }}>
+            <li><b>BMI</b> = paino / (pituus_m)²</li>
+            <li><b>BRI</b> = 364.2 − 365.5 × √(1 − ( (vyötärö/pituus) / π )² )</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<App />);
+</script>
+
